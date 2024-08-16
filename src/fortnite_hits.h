@@ -15,6 +15,7 @@
 #include "CParticleSystem.h"
 #include "iserver.h"
 #include "include/menus.h"
+#include "include/fortnite_hits.h"
 #include <ctime>
 
 class Fortnite_Hits : public ISmmPlugin, public IMetamodListener
@@ -23,6 +24,7 @@ public:
 	bool Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool late);
 	bool Unload(char* error, size_t maxlen);
 	void AllPluginsLoaded();
+	void* OnMetamodQuery(const char* iface, int* ret);
 private:
 	const char* GetAuthor();
 	const char* GetName();
@@ -35,6 +37,13 @@ private:
 private:
 	void Hook_CheckTransmit(CCheckTransmitInfo **ppInfoList, int infoCount, CBitVec<16384> &unionTransmitEdicts,
 								const Entity2Networkable_t **pNetworkables, const uint16 *pEntityIndicies, int nEntities, bool bEnablePVSBits);
+};
+
+class FortniteHitsApi : public IFortniteHitsApi
+{
+public:
+	void GiveClientAccess(int iSlot);
+	void TakeClientAccess(int iSlot);
 };
 
 extern Fortnite_Hits g_Fortnite_Hits;

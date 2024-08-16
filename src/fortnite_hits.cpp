@@ -23,6 +23,17 @@ bool g_bIsFired[64],
 int g_iTotalSGDamage[64][64];
 Vector g_fPlayerPosLate[64];
 
+bool g_bEnable[64];
+float g_fDistance;
+bool g_bFreeAccess;
+
+FortniteHitsApi* g_pFHApi = nullptr;
+IFortniteHitsApi* g_pFHCore = nullptr;
+
+KeyValues* g_hKVData;
+
+std::map<std::string, std::string> g_vecPhrases;
+
 std::vector<CHandle<CParticleSystem>> g_vPRTDamage[64];
 
 SH_DECL_HOOK7_void(ISource2GameEntities, CheckTransmit, SH_NOATTRIB, 0, CCheckTransmitInfo **, int, CBitVec<16384> &, const Entity2Networkable_t **, const uint16 *, int, bool);
@@ -46,12 +57,27 @@ bool Fortnite_Hits::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen,
 	GET_V_IFACE_CURRENT(GetEngineFactory, g_pCVar, ICvar, CVAR_INTERFACE_VERSION);
 	GET_V_IFACE_ANY(GetEngineFactory, g_pSchemaSystem, ISchemaSystem, SCHEMASYSTEM_INTERFACE_VERSION);
 	GET_V_IFACE_CURRENT(GetEngineFactory, engine, IVEngineServer2, SOURCE2ENGINETOSERVER_INTERFACE_VERSION);
+	GET_V_IFACE_CURRENT(GetFileSystemFactory, g_pFullFileSystem, IFileSystem, FILESYSTEM_INTERFACE_VERSION);
 	GET_V_IFACE_ANY(GetServerFactory, g_pSource2GameEntities, ISource2GameEntities, SOURCE2GAMEENTITIES_INTERFACE_VERSION);
 	SH_ADD_HOOK(ISource2GameEntities, CheckTransmit, g_pSource2GameEntities, SH_MEMBER(this, &Fortnite_Hits::Hook_CheckTransmit), true);
 
 	g_SMAPI->AddListener( this, this );
 
+	g_pFHApi = new FortniteHitsApi();
+	g_pFHCore = g_pFHApi;
 	return true;
+}
+
+void* Fortnite_Hits::OnMetamodQuery(const char* iface, int* ret)
+{
+	if (!strcmp(iface, FH_INTERFACE))
+	{
+		*ret = META_IFACE_OK;
+		return g_pFHCore;
+	}
+
+	*ret = META_IFACE_FAILED;
+	return nullptr;
 }
 
 void Fortnite_Hits::Hook_CheckTransmit(CCheckTransmitInfo **ppInfoList, int infoCount, CBitVec<16384> &unionTransmitEdicts, const Entity2Networkable_t **pNetworkables, const uint16 *pEntityIndicies, int nEntities, bool bEnablePVSBits)
@@ -90,6 +116,16 @@ bool Fortnite_Hits::Unload(char *error, size_t maxlen)
 	SH_REMOVE_HOOK(ISource2GameEntities, CheckTransmit, g_pSource2GameEntities, SH_MEMBER(this, &Fortnite_Hits::Hook_CheckTransmit), true);
 	
 	return true;
+}
+
+void FortniteHitsApi::GiveClientAccess(int iSlot)
+{
+	g_bHasAccess[iSlot] = true;
+}
+
+void FortniteHitsApi::TakeClientAccess(int iSlot)
+{
+	g_bHasAccess[iSlot] = false;
 }
 
 bool IsValidClient(int client, bool botcheck = true)
@@ -167,7 +203,7 @@ void ShowPRTDamage(int attacker, int client, int damage, bool crit, bool late = 
 		else
 			pos.z += 35.0 + GetRandomFloat(0.0, 20.0);
 	
-	dif = 50.0;
+	dif = g_fDistance;
 	for(int i = count - 1; i >= 0; i-- )
 	{
 		temppos = pos;
@@ -222,51 +258,160 @@ void OnPlayerHurt(const char* szName, IGameEvent* pEvent, bool bDontBroadcast)
 	HitGroup_t hitgroup;
 	const char* sWeapon;
 	
-	attacker = pEvent->GetInt("attacker"),
-	client = pEvent->GetInt("userid"),
-	damage = pEvent->GetInt("dmg_health");
-	hitgroup = static_cast<HitGroup_t>(pEvent->GetInt("hitgroup"));
-	sWeapon = pEvent->GetString("weapon");
-	
-	if(attacker == client || g_pPlayers->IsFakeClient(attacker))
-		return;
-
-	if(!strcmp(sWeapon, "xm1014") || !strcmp(sWeapon, "nova") || !strcmp(sWeapon, "mag7") || !strcmp(sWeapon, "sawedoff"))
+	attacker = pEvent->GetInt("attacker");
+	if((g_bFreeAccess || g_bHasAccess[attacker]) && g_bEnable[attacker])
 	{
-		if(!g_bIsFired[attacker])
+		client = pEvent->GetInt("userid");
+		damage = pEvent->GetInt("dmg_health");
+		hitgroup = static_cast<HitGroup_t>(pEvent->GetInt("hitgroup"));
+		sWeapon = pEvent->GetString("weapon");
+		
+		if(attacker == client || g_pPlayers->IsFakeClient(attacker))
+			return;
+
+		if(!strcmp(sWeapon, "xm1014") || !strcmp(sWeapon, "nova") || !strcmp(sWeapon, "mag7") || !strcmp(sWeapon, "sawedoff"))
 		{
-			g_pUtils->CreateTimer(0.1f, [attacker](){
-				g_bIsFired[attacker] = false;
-				for(int i = 0; i < 64; i++)
-				{
-					if(!IsValidClient(i, false)) continue;
-					
-					if(g_iTotalSGDamage[attacker][i] != 0)
+			if(!g_bIsFired[attacker])
+			{
+				g_pUtils->CreateTimer(0.1f, [attacker](){
+					g_bIsFired[attacker] = false;
+					for(int i = 0; i < 64; i++)
 					{
-						ShowPRTDamage(attacker, i, g_iTotalSGDamage[attacker][i], g_bIsCrit[attacker][i], true);
-						g_iTotalSGDamage[attacker][i] = 0;
-						g_bIsCrit[attacker][i] = false;
+						if(!IsValidClient(i, false)) continue;
+						
+						if(g_iTotalSGDamage[attacker][i] != 0)
+						{
+							ShowPRTDamage(attacker, i, g_iTotalSGDamage[attacker][i], g_bIsCrit[attacker][i], true);
+							g_iTotalSGDamage[attacker][i] = 0;
+							g_bIsCrit[attacker][i] = false;
+						}
 					}
-				}
-				return -1.0f;
-			});
+					return -1.0f;
+				});
+				
+				g_bIsFired[attacker] = true;
+				g_iTotalSGDamage[attacker][client] = damage;
+			}
+			else
+				g_iTotalSGDamage[attacker][client] += damage;
 			
-			g_bIsFired[attacker] = true;
-			g_iTotalSGDamage[attacker][client] = damage;
+			if(hitgroup == HITGROUP_HEAD)
+				g_bIsCrit[attacker][client] = true;
+			CCSPlayerController* pAttacker = CCSPlayerController::FromSlot(client);
+			if(!pAttacker) return;
+			CCSPlayerPawn* pPawn = pAttacker->GetPlayerPawn();
+			if(!pPawn) return;
+			g_fPlayerPosLate[client] = pPawn->GetAbsOrigin();
 		}
 		else
-			g_iTotalSGDamage[attacker][client] += damage;
-		
-		if(hitgroup == HITGROUP_HEAD)
-			g_bIsCrit[attacker][client] = true;
-		CCSPlayerController* pAttacker = CCSPlayerController::FromSlot(client);
-		if(!pAttacker) return;
-		CCSPlayerPawn* pPawn = pAttacker->GetPlayerPawn();
-		if(!pPawn) return;
-		g_fPlayerPosLate[client] = pPawn->GetAbsOrigin();
+			ShowPRTDamage(attacker, client, damage, (hitgroup == HITGROUP_HEAD));
 	}
-	else
-		ShowPRTDamage(attacker, client, damage, (hitgroup == HITGROUP_HEAD));
+}
+
+std::vector<std::string> split(std::string s, std::string delimiter) {
+    size_t pos_start = 0, pos_end, delim_len = delimiter.length();
+    std::string token;
+    std::vector<std::string> res;
+
+    while ((pos_end = s.find(delimiter, pos_start)) != std::string::npos) {
+        token = s.substr (pos_start, pos_end - pos_start);
+        pos_start = pos_end + delim_len;
+        res.push_back (token);
+    }
+
+    res.push_back (s.substr (pos_start));
+    return res;
+}
+
+bool GetClientFN(int iSlot)
+{
+	CCSPlayerController* pController = CCSPlayerController::FromSlot(iSlot);
+	if (!pController)
+		return true;
+	uint32 m_steamID = pController->m_steamID();
+	if(m_steamID == 0)
+		return true;
+	return g_hKVData->GetBool(std::to_string(m_steamID).c_str(), true);
+}
+
+void SaveClientFH(int iSlot)
+{
+	CCSPlayerController* pController = CCSPlayerController::FromSlot(iSlot);
+	if (!pController)
+		return;
+	uint32 m_steamID = pController->m_steamID();
+	if(m_steamID == 0)
+		return;
+	g_hKVData->SetBool(std::to_string(m_steamID).c_str(), g_bEnable[iSlot]);
+	g_hKVData->SaveToFile(g_pFullFileSystem, "addons/data/fh_data.ini");
+}
+
+void LoadConfig()
+{
+	KeyValues* g_kvSettings = new KeyValues("Settings");
+	char szPath[256];
+	g_SMAPI->Format(szPath, sizeof(szPath), "addons/configs/fortnite_hits.ini");
+	if (!g_kvSettings->LoadFromFile(g_pFullFileSystem, szPath))
+	{
+		g_pUtils->ErrorLog("[%s] Failed to load %s", g_PLAPI->GetLogTag(), szPath);
+		return;
+	}
+	g_fDistance = g_kvSettings->GetFloat("distance", 40.0);
+	g_bFreeAccess = g_kvSettings->GetBool("free_access", true);
+
+	const char* szCommands = g_kvSettings->GetString("commands");
+	std::vector<std::string> vecCommands = split(std::string(szCommands), ";");
+	g_pUtils->RegCommand(g_PLID, {}, vecCommands, [](int iSlot, const char* szContent){
+		if(g_bHasAccess[iSlot] || g_bFreeAccess)
+		{
+			g_bEnable[iSlot] = !g_bEnable[iSlot];
+			if(g_bEnable[iSlot])
+				g_pUtils->PrintToChat(iSlot, g_vecPhrases["FH_Enable"].c_str());
+			else
+				g_pUtils->PrintToChat(iSlot, g_vecPhrases["FH_Disable"].c_str());
+			SaveClientFH(iSlot);
+		}
+		else
+			g_pUtils->PrintToChat(iSlot, g_vecPhrases["FH_NoAccess"].c_str());
+		return true;
+	});
+}
+
+void LoadTranslations()
+{
+	KeyValues::AutoDelete g_kvPhrases("Phrases");
+	const char *pszPath = "addons/translations/fortnite_hits.phrases.txt";
+	if (!g_kvPhrases->LoadFromFile(g_pFullFileSystem, pszPath))
+	{
+		Warning("Failed to load %s\n", pszPath);
+		return;
+	}
+
+	std::string szLanguage = std::string(g_pUtils->GetLanguage());
+	const char* g_pszLanguage = szLanguage.c_str();
+	for (KeyValues *pKey = g_kvPhrases->GetFirstTrueSubKey(); pKey; pKey = pKey->GetNextTrueSubKey())
+		g_vecPhrases[std::string(pKey->GetName())] = std::string(pKey->GetString(g_pszLanguage));
+}
+
+bool LoadData()
+{
+	g_hKVData = new KeyValues("Data");
+
+	const char *pszPath = "addons/data/fh_data.ini";
+
+	if (!g_hKVData->LoadFromFile(g_pFullFileSystem, pszPath))
+	{
+		g_pUtils->ErrorLog("[%s] Failed to load %s", g_PLAPI->GetLogTag(), pszPath);
+		return false;
+	}
+
+	return true;
+}
+
+void OnClientAuthorized(int iSlot, uint64 iSteamID64)
+{
+	g_bHasAccess[iSlot] = false;
+	g_bEnable[iSlot] = GetClientFN(iSlot);
 }
 
 void Fortnite_Hits::AllPluginsLoaded()
@@ -293,7 +438,11 @@ void Fortnite_Hits::AllPluginsLoaded()
 	}
 	g_pUtils->StartupServer(g_PLID, StartupServer);
 	g_pUtils->HookEvent(g_PLID, "player_hurt", OnPlayerHurt);
+	g_pPlayers->HookOnClientAuthorized(g_PLID, OnClientAuthorized);
 
+	LoadData();
+	LoadConfig();
+	LoadTranslations();
 }
 
 ///////////////////////////////////////
@@ -304,7 +453,7 @@ const char* Fortnite_Hits::GetLicense()
 
 const char* Fortnite_Hits::GetVersion()
 {
-	return "1.0";
+	return "1.1";
 }
 
 const char* Fortnite_Hits::GetDate()

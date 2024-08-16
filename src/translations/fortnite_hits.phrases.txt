@@ -1,0 +1,18 @@
+"Phrases"
+{
+    "FH_Enable"
+    {
+        "ru"        " {GREEN}[Fortnite Hits]{DEFAULT} Вы успешно {GREEN}включили{DEFAULT} показ урона"
+        "en"        " {GREEN}[Fortnite Hits]{DEFAULT} You have successfully {GREEN}enabled{DEFAULT} damage display"
+    }
+    "FH_Disable"
+    {
+        "ru"        " {GREEN}[Fortnite Hits]{DEFAULT} Вы успешно {RED}выключили{DEFAULT} показ урона"
+        "en"        " {GREEN}[Fortnite Hits]{DEFAULT} You have successfully {RED}disabled{DEFAULT} damage display"
+    }
+    "FH_NoAccess"
+    {
+        "ru"        " {GREEN}[Fortnite Hits]{DEFAULT} У вас нет доступа к этой команде"
+        "en"        " {GREEN}[Fortnite Hits]{DEFAULT} You do not have access to this command"
+    }
+}
