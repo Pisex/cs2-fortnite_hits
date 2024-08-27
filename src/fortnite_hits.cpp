@@ -259,9 +259,11 @@ void OnPlayerHurt(const char* szName, IGameEvent* pEvent, bool bDontBroadcast)
 	const char* sWeapon;
 	
 	attacker = pEvent->GetInt("attacker");
+	if(!IsValidClient(attacker, false)) return;
 	if((g_bFreeAccess || g_bHasAccess[attacker]) && g_bEnable[attacker])
 	{
 		client = pEvent->GetInt("userid");
+		if(client < 0 || client >= 64) return;
 		damage = pEvent->GetInt("dmg_health");
 		hitgroup = static_cast<HitGroup_t>(pEvent->GetInt("hitgroup"));
 		sWeapon = pEvent->GetString("weapon");
@@ -453,7 +455,7 @@ const char* Fortnite_Hits::GetLicense()
 
 const char* Fortnite_Hits::GetVersion()
 {
-	return "1.1";
+	return "1.1.1";
 }
 
 const char* Fortnite_Hits::GetDate()
