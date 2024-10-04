@@ -22,6 +22,12 @@ public:
     virtual const CSteamID* GetSteamID(int iSlot) = 0;
 
     virtual void HookOnClientAuthorized(SourceMM::PluginId id, OnClientAuthorizedCallback callback) = 0;
+
+    virtual void CommitSuicide(int iSlot, bool bExplode, bool bForce) = 0;
+    virtual void ChangeTeam(int iSlot, int iNewTeam) = 0;
+    virtual void Teleport(int iSlot, const Vector *position, const QAngle *angles, const Vector *velocity) = 0;
+    virtual void Respawn(int iSlot) = 0;
+    virtual void DropWeapon(int iSlot, CBaseEntity* pWeapon, Vector* pVecTarget = nullptr, Vector* pVelocity = nullptr) = 0;
 };
 
 /////////////////////////////////////////////////////////////////
@@ -37,6 +43,8 @@ typedef std::function<bool(int iSlot, const char* szContent)> CommandCallback;
 typedef std::function<bool(int iSlot, const char* szContent, bool bMute)> CommandCallbackPost;
 typedef std::function<void(const char* szName, IGameEvent* pEvent, bool bDontBroadcast)> EventCallback;
 typedef std::function<void()> StartupCallback;
+typedef std::function<bool(int iSlot, CTakeDamageInfoContainer &pInfoContainer)> OnTakeDamageCallback;
+typedef std::function<bool(int iSlot, CTakeDamageInfo &pInfo)> OnTakeDamagePreCallback;
 
 class IUtilsApi
 {
@@ -83,6 +91,9 @@ public:
     virtual void AcceptEntityInput(CEntityInstance* pEntity, const char* szInputName, variant_t value = variant_t(""), CEntityInstance *pActivator = nullptr, CEntityInstance *pCaller = nullptr) = 0;
     virtual CTimer* CreateTimer(float flInterval, std::function<float()> func) = 0;
     virtual void RemoveTimer(CTimer* timer) = 0;
+    virtual void HookOnTakeDamage(SourceMM::PluginId id, OnTakeDamageCallback callback) = 0;
+    virtual void HookOnTakeDamagePre(SourceMM::PluginId id, OnTakeDamagePreCallback callback) = 0;
+    virtual void CollisionRulesChanged(CBaseEntity* pEnt) = 0;
 };
 
 /////////////////////////////////////////////////////////////////
@@ -108,9 +119,17 @@ struct Menu
 {
     std::string szTitle;	
     std::vector<Items> hItems;
-    bool bBack;
-    bool bExit;
-	MenuCallbackFunc hFunc;
+    bool bBack = false;
+    bool bExit = false;
+	MenuCallbackFunc hFunc = nullptr;
+
+    void clear() {
+        szTitle.clear();
+        hItems.clear();
+        bBack = false;
+        bExit = false;
+        hFunc = nullptr;
+    }
 };
 
 struct MenuPlayer
@@ -119,6 +138,13 @@ struct MenuPlayer
     int iList;
     Menu hMenu;
     int iEnd;
+
+    void clear() {
+        bEnabled = false;
+        iList = 0;
+        hMenu.clear();
+        iEnd = 0;
+    }
 };
 
 class IMenusApi

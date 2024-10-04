@@ -218,14 +218,14 @@ void ShowPRTDamage(int attacker, int client, int damage, bool crit, bool late = 
 		g_SMAPI->Format(buffer2, sizeof(buffer2), "%s.vpcf", buffer);
 		pEnt->m_bStartActive(true);
 		pEnt->m_iszEffectName(buffer2);
-		pEnt->Teleport(&temppos, &ang, nullptr);
+		g_pPlayers->Teleport(pEnt->entindex()-1, &temppos, &ang, nullptr);
 		g_pUtils->DispatchSpawn(pEnt, nullptr);
 		g_pUtils->CreateTimer(0.5f, [attacker, hEnt, temppos, ang, buffer](){
 			CParticleSystem* pEnt = hEnt;
 			if(pEnt)
 			{
 				pEnt->m_bStartActive(false);
-				pEnt->Teleport(nullptr, nullptr, nullptr);
+				g_pPlayers->Teleport(pEnt->entindex()-1, nullptr, nullptr, nullptr);
 				g_pUtils->RemoveEntity(pEnt);
 			}
 			g_vPRTDamage[attacker].erase(std::remove(g_vPRTDamage[attacker].begin(), g_vPRTDamage[attacker].end(), hEnt), g_vPRTDamage[attacker].end());
@@ -236,7 +236,7 @@ void ShowPRTDamage(int attacker, int client, int damage, bool crit, bool late = 
 			g_SMAPI->Format(buffer2, sizeof(buffer2), "%s_child.vpcf", buffer);
 			pEntChilder->m_bStartActive(true);
 			pEntChilder->m_iszEffectName(buffer2);
-			pEntChilder->Teleport(&temppos, &ang, nullptr);
+			g_pPlayers->Teleport(pEntChilder->entindex()-1, &temppos, &ang, nullptr);
 			g_pUtils->DispatchSpawn(pEntChilder, nullptr);
 			g_pUtils->CreateTimer(2.5f, [attacker, hEntChilder](){
 				CParticleSystem* pEntChilder = hEntChilder;
